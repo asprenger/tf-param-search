@@ -1,2 +1,1 @@
-# tf-param-search
-Prototyping TensorFlow parameter search
+# Parameter search for TensorFlow
