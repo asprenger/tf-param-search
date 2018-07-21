@@ -40,8 +40,15 @@ class BaseParamSearch(object):
         model_dir = os.path.join(model_dir, ts_rand())
         estimator = tf.estimator.Estimator(model_fn=self.model_fn, model_dir=model_dir, 
                                            params=params, config=self.run_config)
+
+        def train_input_fn():
+            if 'batch_size' in params:
+                return self.train_input_fn().batch(params['batch_size'])
+            else:
+                return self.train_input_fn()
+
         start = current_time_ms()
-        estimator.train(input_fn=self.train_input_fn, hooks=self.train_hooks) 
+        estimator.train(input_fn=train_input_fn, hooks=self.train_hooks) 
         train_time = current_time_ms() - start
         start = current_time_ms()
         eval_results = estimator.evaluate(input_fn=self.eval_input_fn, hooks=self.eval_hooks)
