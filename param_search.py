@@ -5,39 +5,66 @@ import numpy as np
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.model_selection import ParameterGrid, ParameterSampler
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 from utils import ts_rand, current_time_ms
 
 class BaseParamSearch(object):
 
-    def __init__(self, model_fn, train_input_fn, eval_input_fn, model_base_dir, n_jobs, train_hooks):
+    def __init__(self, model_fn, train_input_fn, eval_input_fn, model_base_dir, train_hooks, eval_hooks, run_config):
         self.model_fn = model_fn
         self.train_input_fn = train_input_fn
         self.eval_input_fn = eval_input_fn
-        self.n_jobs = n_jobs
-        self.joblib_backend = 'threading'
+        self.joblib_backend = 'threading' # 'threading' or 'multiprocessing'
         self.joblib_verbose = 0
         self.model_base_dir = model_base_dir
         self.train_hooks = train_hooks
+        self.eval_hooks = eval_hooks
+        self.run_config = run_config
+        self.report = None
         
+    def _get_available_gpus(self):
+        local_device_protos = device_lib.list_local_devices()
+        return [x.name for x in local_device_protos if x.device_type == 'GPU']
+
+    def _get_available_cpus(self):
+        local_device_protos = device_lib.list_local_devices()
+        return [x.name for x in local_device_protos if x.device_type == 'CPU']
+
+    def _get_devices(self):
+        devices = self._get_available_gpus()
+        if len(devices) == 0:
+            devices = self._get_available_cpus()
+        return devices    
+    
     def _train_and_eval(self, params, model_dir):
         model_dir = os.path.join(model_dir, ts_rand())
-        estimator = tf.estimator.Estimator(model_fn=self.model_fn, model_dir=model_dir, params=params)
+        estimator = tf.estimator.Estimator(model_fn=self.model_fn, model_dir=model_dir, 
+                                           params=params, config=self.run_config)
         start = current_time_ms()
         estimator.train(input_fn=self.train_input_fn, hooks=self.train_hooks) 
         train_time = current_time_ms() - start
         start = current_time_ms()
-        eval_results = estimator.evaluate(input_fn=self.eval_input_fn)
+        eval_results = estimator.evaluate(input_fn=self.eval_input_fn, hooks=self.eval_hooks)
         eval_time = current_time_ms() - start
         eval_score = eval_results['loss']
-        return (eval_score, model_dir, eval_results, train_time, eval_time)
+        return (eval_score, model_dir, eval_results, train_time, eval_time, params)
 
     def search(self):
-        model_dir = os.path.join(self.model_base_dir, ts_rand())
         candidate_params = list(self.get_param_iterator())
-        out = Parallel(n_jobs=self.n_jobs, verbose=self.joblib_verbose, backend=self.joblib_backend)(
+        model_dir = os.path.join(self.model_base_dir, ts_rand())
+        
+        devices = self._get_devices()
+        num_devices = len(devices)
+        for i, params in enumerate(candidate_params):
+            params['_idx'] = i
+            params['_device'] = devices[i % num_devices]
+
+        out = Parallel(n_jobs=num_devices, verbose=self.joblib_verbose, backend=self.joblib_backend)(
             delayed(self._train_and_eval, check_pickle=False)(parameters, model_dir) 
                 for parameters in candidate_params)
-        (eval_scores, model_dirs, eval_results, train_times, eval_times) = zip(*out)
+
+        self.report = out
+        (eval_scores, model_dirs, eval_results, train_times, eval_times, params) = zip(*out)
         best_index = np.array(eval_scores).argmin()
         best_score = eval_scores[best_index]
         best_params = candidate_params[best_index]
@@ -47,9 +74,10 @@ class BaseParamSearch(object):
 
 
 class GridParamSearch(BaseParamSearch):
-    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, n_jobs=1, train_hooks=[]):
-        super(GridParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, 
-            eval_input_fn=eval_input_fn, n_jobs=n_jobs, train_hooks=train_hooks, model_base_dir=model_base_dir)
+    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, train_hooks=[], 
+                 eval_hooks=[], run_config=None):
+        super(GridParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn, 
+              train_hooks=train_hooks, eval_hooks=eval_hooks, model_base_dir=model_base_dir, run_config=run_config)
         self.param_grid = param_grid
 
     def get_param_iterator(self):
@@ -59,13 +87,13 @@ class GridParamSearch(BaseParamSearch):
 
 class RandomParamSearch(BaseParamSearch):
 
-    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_distributions, model_base_dir, n_iter=10, n_jobs=1, train_hooks=[]):
+    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_distributions, model_base_dir, n_iter, 
+                 train_hooks=[], eval_hooks=[], run_config=None):
         self.param_distributions = param_distributions
         self.n_iter = n_iter
-        super(RandomParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, 
-            eval_input_fn=eval_input_fn, n_jobs=n_jobs, train_hooks=train_hooks, model_base_dir=model_base_dir)
+        super(RandomParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn, 
+              train_hooks=train_hooks, eval_hooks=eval_hooks, model_base_dir=model_base_dir, run_config=run_config)
 
     def get_param_iterator(self):
         """Return iterator over parameter sets"""
         return ParameterSampler(self.param_distributions, self.n_iter)
-
