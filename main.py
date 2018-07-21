@@ -107,8 +107,8 @@ def train_input_fn():
     ds = dataset.train('/tmp/mnist')
     ds = ds.cache()
     ds = ds.shuffle(buffer_size=50000)
-    ds = ds.batch(batch_size)
     ds = ds.repeat(10)
+    ds = ds.batch(batch_size)
     return ds      
 
 def eval_input_fn():
@@ -128,13 +128,13 @@ def main():
     session_config.log_device_placement = False
     run_config = tf.estimator.RunConfig(session_config=session_config)
 
-    #param_grid = {'hidden_size': [64, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4]}
-    #param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, 
-    #                               run_config=run_config)
+    param_grid = {'hidden_size': [64, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4]}
+    param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, 
+                                   run_config=run_config)
 
-    param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon()}
-    param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
-                                     model_base_dir, n_iter=2, run_config=run_config)
+#    param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon()}
+#    param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
+#                                     model_base_dir, n_iter=2, run_config=run_config)
 
     best_params, best_score, best_model_dir, best_eval_result = param_search.search()
     print('Best score: %f' % best_score)
