@@ -1,6 +1,4 @@
-
 import logging
-from  collections import namedtuple
 from scipy.stats.distributions import expon
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
@@ -15,7 +13,7 @@ for handler in tf_logger.handlers: handler.setFormatter(formatter)
 
 
 def build_model(x, hidden_size, keep_prob):
-    print('BUILD MODEL(x=%s, hidden_size=%d, keep_prob=%f)' % (x.shape, hidden_size, keep_prob))
+    tf.logging.info('build_model(x=%s, hidden_size=%d, keep_prob=%f)' % (x.shape, hidden_size, keep_prob))
     with tf.variable_scope("model"):
         x_image = tf.reshape(x, [-1, 28, 28, 1])
         conv1 = layers.convolution2d(x_image,
@@ -106,7 +104,7 @@ def train_input_fn():
     ds = dataset.train('/tmp/mnist')
     ds = ds.cache()
     ds = ds.shuffle(buffer_size=50000)
-    ds = ds.repeat(10)
+    ds = ds.repeat(1)
     return ds      
 
 def eval_input_fn():
@@ -117,34 +115,29 @@ def eval_input_fn():
 
 def main():
 
-    data_dir = '/tmp/mnist'
     model_base_dir = '/tmp/param_search'
-    batch_size = 128
-
+    
     session_config = tf.ConfigProto()
     session_config.log_device_placement = False
     run_config = tf.estimator.RunConfig(session_config=session_config)
 
-    param_grid = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [32, 64, 128, 256]}
+    param_grid = {'hidden_size': [64, 128, 256, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [32]}
     param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, 
                                    run_config=run_config)
 
-#    param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon()}
+#    param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon(), 'batch_size': [32]}
 #    param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
-#                                     model_base_dir, n_iter=2, run_config=run_config)
+#                                     model_base_dir, n_iter=4, run_config=run_config)
 
     best_params, best_score, best_model_dir, best_eval_result = param_search.search()
-    print('Best score: %f' % best_score)
-    print('Best parameters: %s' % str(best_params))
-    print('Best model: %s' % best_model_dir)
-    print('Best eval result: %s' % best_eval_result)
-
+    tf.logging.info('Best parameter set: %s' % str(best_params))
+    tf.logging.info('Best score: %f' % best_score)
+    tf.logging.info('Best eval results: %s' % best_eval_result)
+    tf.logging.info('Best model location: %s' % best_model_dir)
     
-    ParamSearchResult = namedtuple('ParamSearchResult', ['eval_score', 'model_dir', 'eval_results', 'train_time', 'eval_time', 'params'])
-    report = param_search.report.copy()
-    for x in report:
-        result = ParamSearchResult(*x)
-        print(result.eval_score, result.params)
+    for result in param_search.search_results:
+        tf.logging.info('%s: %s' % (result.eval_results, result.params))
 
 if __name__ == '__main__':
     main()
+

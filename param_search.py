@@ -2,11 +2,14 @@ import os
 import time
 import random
 import numpy as np
+from collections import namedtuple
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.model_selection import ParameterGrid, ParameterSampler
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 from utils import ts_rand, current_time_ms
+
+ParamSearchResult = namedtuple('ParamSearchResult', ['eval_score', 'model_dir', 'eval_results', 'train_time', 'eval_time', 'params'])
 
 class BaseParamSearch(object):
 
@@ -57,7 +60,7 @@ class BaseParamSearch(object):
         return (eval_score, model_dir, eval_results, train_time, eval_time, params)
 
     def search(self):
-        candidate_params = list(self.get_param_iterator())
+        candidate_params = list(self._get_param_iterator())
         model_dir = os.path.join(self.model_base_dir, ts_rand())
         
         devices = self._get_devices()
@@ -70,7 +73,9 @@ class BaseParamSearch(object):
             delayed(self._train_and_eval, check_pickle=False)(parameters, model_dir) 
                 for parameters in candidate_params)
 
-        self.report = out
+        search_results = [ParamSearchResult(*result) for result in out]
+        self.search_results = sorted(search_results, key=lambda x: x.eval_score)
+
         (eval_scores, model_dirs, eval_results, train_times, eval_times, params) = zip(*out)
         best_index = np.array(eval_scores).argmin()
         best_score = eval_scores[best_index]
@@ -81,19 +86,24 @@ class BaseParamSearch(object):
 
 
 class GridParamSearch(BaseParamSearch):
+    """
+     Exhaustive search over all parameter value combinations for an Estimator.
+    """
     def __init__(self, model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, train_hooks=[], 
                  eval_hooks=[], run_config=None):
         super(GridParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn, 
               train_hooks=train_hooks, eval_hooks=eval_hooks, model_base_dir=model_base_dir, run_config=run_config)
         self.param_grid = param_grid
 
-    def get_param_iterator(self):
+    def _get_param_iterator(self):
         """Return iterator over parameter sets"""
         return ParameterGrid(self.param_grid)
 
 
 class RandomParamSearch(BaseParamSearch):
-
+    """
+     Sample a given number of candidates from the parameter space.
+    """
     def __init__(self, model_fn, train_input_fn, eval_input_fn, param_distributions, model_base_dir, n_iter, 
                  train_hooks=[], eval_hooks=[], run_config=None):
         self.param_distributions = param_distributions
@@ -101,6 +111,6 @@ class RandomParamSearch(BaseParamSearch):
         super(RandomParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn, 
               train_hooks=train_hooks, eval_hooks=eval_hooks, model_base_dir=model_base_dir, run_config=run_config)
 
-    def get_param_iterator(self):
+    def _get_param_iterator(self):
         """Return iterator over parameter sets"""
         return ParameterSampler(self.param_distributions, self.n_iter)
