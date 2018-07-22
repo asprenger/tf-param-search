@@ -57,7 +57,7 @@ class BaseParamSearch(object):
         estimator = tf.estimator.Estimator(model_fn=self.model_fn, model_dir=model_dir, 
                                            params=params, config=self.run_config)
 
-        def train_input_fn():c
+        def train_input_fn():
             if 'batch_size' in params:
                 return self.train_input_fn().batch(params['batch_size'])
             else:

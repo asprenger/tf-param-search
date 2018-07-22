@@ -3,7 +3,7 @@ from scipy.stats.distributions import expon
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 from param_search import GridParamSearch, RandomParamSearch
-import dataset
+import mnist_dataset
 
 
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -101,15 +101,14 @@ def model_fn(features, labels, mode, params, config):
 
 
 def train_input_fn():
-    ds = dataset.train('/tmp/mnist')
+    ds = mnist_dataset.train('/tmp/mnist')
     ds = ds.cache()
     ds = ds.shuffle(buffer_size=50000)
-    ds = ds.repeat(1)
-    ds = ds.take(5000)
+    ds = ds.repeat(10)
     return ds      
 
 def eval_input_fn():
-    ds = dataset.test('/tmp/mnist')
+    ds = mnist_dataset.test('/tmp/mnist')
     ds = ds.batch(128)
     return ds
 
