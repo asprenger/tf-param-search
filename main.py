@@ -105,6 +105,7 @@ def train_input_fn():
     ds = ds.cache()
     ds = ds.shuffle(buffer_size=50000)
     ds = ds.repeat(1)
+    ds = ds.take(5000)
     return ds      
 
 def eval_input_fn():
@@ -121,13 +122,15 @@ def main():
     session_config.log_device_placement = False
     run_config = tf.estimator.RunConfig(session_config=session_config)
 
+    # sample for grid search
     param_grid = {'hidden_size': [64, 128, 256, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [32]}
     param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, 
                                    run_config=run_config)
 
-#    param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon(), 'batch_size': [32]}
-#    param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
-#                                     model_base_dir, n_iter=4, run_config=run_config)
+    # sample for random search
+    #param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon(), 'batch_size': [32]}
+    #param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
+    #                                 model_base_dir, n_iter=4, run_config=run_config)
 
     best_params, best_score, best_model_dir, best_eval_result = param_search.search()
     tf.logging.info('Best parameter set: %s' % str(best_params))

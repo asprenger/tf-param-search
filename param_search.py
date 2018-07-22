@@ -12,6 +12,19 @@ from utils import ts_rand, current_time_ms
 ParamSearchResult = namedtuple('ParamSearchResult', ['eval_score', 'model_dir', 'eval_results', 'train_time', 'eval_time', 'params'])
 
 class BaseParamSearch(object):
+    """Base class for parameter search.
+
+    Args:
+        model_fn: Estimator model function.
+        train_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        eval_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        model_base_dir: Directory to save model parameters and graphs.
+        train_hooks: List of `SessionRunHook` subclass instances used during training.
+        eval_hooks: List of `SessionRunHook` subclass instances used during evaluation.
+        run_config: Optional Estimator configuration object.
+    """    
 
     def __init__(self, model_fn, train_input_fn, eval_input_fn, model_base_dir, train_hooks, eval_hooks, run_config):
         self.model_fn = model_fn
@@ -44,7 +57,7 @@ class BaseParamSearch(object):
         estimator = tf.estimator.Estimator(model_fn=self.model_fn, model_dir=model_dir, 
                                            params=params, config=self.run_config)
 
-        def train_input_fn():
+        def train_input_fn():c
             if 'batch_size' in params:
                 return self.train_input_fn().batch(params['batch_size'])
             else:
@@ -60,13 +73,20 @@ class BaseParamSearch(object):
         return (eval_score, model_dir, eval_results, train_time, eval_time, params)
 
     def search(self):
+        """Find Estimator parameters by exhaustive search over all parameter value combinations.
+
+        Returns:
+            best_params: `dict` of parameters that performed best
+            best_score: Best evaluation score
+            best_model_dir: Directory where the best model is saved
+            best_eval_result: Evaluation result for the best model
+        """    
         candidate_params = list(self._get_param_iterator())
         model_dir = os.path.join(self.model_base_dir, ts_rand())
         
         devices = self._get_devices()
         num_devices = len(devices)
         for i, params in enumerate(candidate_params):
-            params['_idx'] = i
             params['_device'] = devices[i % num_devices]
 
         out = Parallel(n_jobs=num_devices, verbose=self.joblib_verbose, backend=self.joblib_backend)(
@@ -86,11 +106,26 @@ class BaseParamSearch(object):
 
 
 class GridParamSearch(BaseParamSearch):
-    """
-     Exhaustive search over all parameter value combinations for an Estimator.
-    """
-    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, train_hooks=[], 
-                 eval_hooks=[], run_config=None):
+    """Find Estimator parameters by exhaustive search over all parameter value combinations.
+
+    Args:
+        model_fn: Estimator model function.
+        train_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        eval_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        param_grid : A `dict` of string to sequence, or sequence of such
+            The parameter grid to explore, as a dictionary mapping estimator parameters to 
+            sequences of allowed values. A sequence of dicts signifies a sequence of grids 
+            to search, and is useful to avoid exploring parameter combinations that make no 
+            sense.
+        model_base_dir: Directory to save model parameters and graphs.
+        train_hooks: List of `SessionRunHook` subclass instances used during training.
+        eval_hooks: List of `SessionRunHook` subclass instances used during evaluation.
+        run_config: Optional Estimator configuration object.
+    """    
+    def __init__(self, model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, train_hooks=None, 
+                 eval_hooks=None, run_config=None):
         super(GridParamSearch, self).__init__(model_fn=model_fn, train_input_fn=train_input_fn, eval_input_fn=eval_input_fn, 
               train_hooks=train_hooks, eval_hooks=eval_hooks, model_base_dir=model_base_dir, run_config=run_config)
         self.param_grid = param_grid
@@ -102,7 +137,22 @@ class GridParamSearch(BaseParamSearch):
 
 class RandomParamSearch(BaseParamSearch):
     """
-     Sample a given number of candidates from the parameter space.
+    Find Estimator parameters by sampling a given number of candidates from the parameter space.
+
+    Args:
+        model_fn: Estimator model function.
+        train_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        eval_input_fn: A function that provides input data for training. The function must
+            return a 'tf.data.Dataset' object.
+        param_distributions : Dictionary where the keys are parameters and values are distributions 
+            from which a parameter is to be sampled. Distributions either have to provide a ``rvs`` 
+            function to sample from them, or can be given as a list of values.
+        model_base_dir: Directory to save model parameters and graphs.
+        n_iter : An `integer`. Number of parameter settings that are produced.
+        train_hooks: List of `SessionRunHook` subclass instances used during training.
+        eval_hooks: List of `SessionRunHook` subclass instances used during evaluation.
+        run_config: Optional Estimator configuration object.
     """
     def __init__(self, model_fn, train_input_fn, eval_input_fn, param_distributions, model_base_dir, n_iter, 
                  train_hooks=[], eval_hooks=[], run_config=None):
