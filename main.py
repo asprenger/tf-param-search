@@ -1,5 +1,5 @@
 import logging
-from scipy.stats.distributions import expon
+from scipy.stats.distributions import uniform
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 from param_search import GridParamSearch, RandomParamSearch
@@ -104,7 +104,7 @@ def train_input_fn():
     ds = mnist_dataset.train('/tmp/mnist')
     ds = ds.cache()
     ds = ds.shuffle(buffer_size=50000)
-    ds = ds.repeat(10)
+    ds = ds.repeat(1)
     return ds      
 
 def eval_input_fn():
@@ -122,12 +122,22 @@ def main():
     run_config = tf.estimator.RunConfig(session_config=session_config)
 
     # sample for grid search
-    param_grid = {'hidden_size': [64, 128, 256, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [32]}
+    param_grid = {
+        'hidden_size': [64, 128, 256, 512], 
+        'keep_rate': [0.5], 
+        'learning_rate': [1e-4], 
+        'batch_size': [32]
+    }
     param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid, model_base_dir, 
                                    run_config=run_config)
 
-    # sample for random search
-    #param_distributions = {'hidden_size': [512], 'keep_rate': [0.5], 'learning_rate': expon(), 'batch_size': [32]}
+    # Example random search
+    #param_distributions = {
+    #    'hidden_size': [512], 
+    #    'keep_rate': [0.5], 
+    #    'learning_rate': uniform(loc=0.0001, scale=0.001), 
+    #    'batch_size': [32]
+    #}
     #param_search = RandomParamSearch(model_fn, train_input_fn, eval_input_fn, param_distributions, 
     #                                 model_base_dir, n_iter=4, run_config=run_config)
 
@@ -138,7 +148,9 @@ def main():
     tf.logging.info('Best model location: %s' % best_model_dir)
     
     for result in param_search.search_results:
-        tf.logging.info('%s: %s' % (result.eval_results, result.params))
+        tf.logging.info('loss=%f accuracy=%f: %s' % (result.eval_results['loss'], result.eval_results['accuracy'], result.params))
+
+
 
 if __name__ == '__main__':
     main()
