@@ -11,4 +11,5 @@ The current code depends on Sklearn for generating parameter sets and for parall
 
 To run the code execute:
 
+    pip install -r requirements.txt
 	python main.py

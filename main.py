@@ -121,7 +121,7 @@ def main():
     session_config.log_device_placement = False
     run_config = tf.estimator.RunConfig(session_config=session_config)
 
-    # sample for grid search
+    # Example grid search
     param_grid = {
         'hidden_size': [64, 128, 256, 512], 
         'keep_rate': [0.5], 
@@ -149,7 +149,6 @@ def main():
     
     for result in param_search.search_results:
         tf.logging.info('loss=%f accuracy=%f: %s' % (result.eval_results['loss'], result.eval_results['accuracy'], result.params))
-
 
 
 if __name__ == '__main__':
