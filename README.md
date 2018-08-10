@@ -1,14 +1,21 @@
 
-# Parameter search for TensorFlow
+# Parameter search for TensorFlow Estimators
 
-A prototype for parameter search using a TensorFlow Estimator. 
+A prototype to parameter search using TensorFlow estimators. Currently random and grid parameter 
+search is supported. The implementation is based on Spark. Spark only handles task coordination
+and failover. The train and evaluation data is transfered by the TensorFlow dataset framework.
 
-The current code only supports non-distributed training. If multiple GPUs are detected in the local 
-machine the search is run in parallel by training a model on each GPU. Otherwise it falls back to 
-sequential training on CPU.
+The current test setup is a Spark cluster with 2 workers. Each worker has a GPU.
 
-The current code depends on Sklearn for generating parameter sets and for parallel execution.
+Example invocation:
 
-To run the code execute:
-
-	python main.py
+    spark-submit --master yarn \
+        --deploy-mode cluster \
+        --driver-memory 6g \
+        --executor-memory 6g \
+        --num-executors 2 \
+        --executor-cores 1 \
+        --conf spark.yarn.maxAppAttempts=1 \
+        --conf spark.executor.memoryOverhead=20000 \
+        --py-files mnist_dataset.py,param_search_on_spark.py,utils.py \
+        main.py
