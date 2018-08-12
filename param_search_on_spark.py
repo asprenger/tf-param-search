@@ -1,18 +1,22 @@
 import os
 import time
 import random
+import socket
+import logging
 from collections import namedtuple
 import numpy as np
 from sklearn.model_selection import ParameterGrid, ParameterSampler
 import tensorflow as tf
 from utils import ts_rand, current_time_ms
+from gpu_info import get_gpus
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s (%(threadName)s-%(process)d) %(message)s")
+tf.logging.set_verbosity(tf.logging.INFO)
 
 ParamSearchResult = namedtuple('ParamSearchResult', ['eval_score', 'eval_results', 'train_time', 'eval_time', 'params'])
 
 def _run_search(model_fn, train_input_fn, eval_input_fn, train_hooks, eval_hooks):
-    """
-    Create a `mapPartitions` function that calls `_train_and_eval` for a sequence
-    of parameter sets.
+    """Wraps the `_train_and_eval` function in a Spark mapPartitions function.
     
     Args:
         model_fn: Estimator model function.
@@ -23,6 +27,8 @@ def _run_search(model_fn, train_input_fn, eval_input_fn, train_hooks, eval_hooks
         train_hooks: List of `SessionRunHook` subclass instances used during training.
         eval_hooks: List of `SessionRunHook` subclass instances used during evaluation.
 
+    Returns:
+        A nodeRDD.mapPartitions() function.
     """
     def _wrapper_fn(param_iter):
         return [_train_and_eval(model_fn, train_input_fn, eval_input_fn, params, train_hooks, eval_hooks) for params in param_iter]
@@ -60,9 +66,12 @@ def _train_and_eval(model_fn, train_input_fn, eval_input_fn, params, train_hooks
         else:
             return train_input_fn()
 
+    logging.info('Train model with: %s' % params)
     start = current_time_ms()
     estimator.train(input_fn=wrapped_train_input_fn, hooks=train_hooks)
     train_time = current_time_ms() - start
+
+    logging.info('Evaluate model with: %s' % params)
     start = current_time_ms()
     eval_results = estimator.evaluate(input_fn=eval_input_fn, hooks=eval_hooks)
     eval_time = current_time_ms() - start
@@ -96,6 +105,14 @@ class BaseParamSearch(object):
         Run a parameter search.
         """
         
+        num_executors = int(sc._conf.get('spark.executor.instances'))
+        executor_idx_rdd = sc.parallelize(list(range(num_executors)), num_executors)
+        def get_gpu_info(executor_idx):
+            return [get_gpus()]
+        gpu_infos = executor_idx_rdd.mapPartitions(get_gpu_info).collect()
+        print('GPU INFOS:', gpu_infos)
+
+
         param_sets = list(self._get_param_iterator())
         num_partitions = len(param_sets)
 

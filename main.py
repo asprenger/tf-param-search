@@ -1,4 +1,6 @@
 
+import logging
+
 import os
 import sys
 import time
@@ -15,6 +17,8 @@ from utils import delete_dir, ts_rand, current_time_ms
 from scipy.stats.distributions import expon
 from param_search_on_spark import GridParamSearch, RandomParamSearch
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s (%(threadName)s-%(process)d) %(message)s")
+tf.logging.set_verbosity(tf.logging.INFO)
 
 def build_model(x, hidden_size, keep_prob):
     print('BUILD MODEL(x=%s, hidden_size=%d, keep_prob=%f)' % (x.shape, hidden_size, keep_prob))
@@ -125,13 +129,14 @@ if __name__ == "__main__":
     sc = spark_session.sparkContext
     num_executors = int(sc._conf.get("spark.executor.instances"))
 
-    param_grid = {'hidden_size': [128, 256, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [8]}
+    param_grid = {'hidden_size': [256, 512], 'keep_rate': [0.5], 'learning_rate': [1e-4], 'batch_size': [128]}
     param_search = GridParamSearch(model_fn, train_input_fn, eval_input_fn, param_grid)
     best_params, best_score, best_eval_result = param_search.search(sc)
-    print('Best score:', best_score)
-    print('Best eval result:', best_eval_result)
-    print('Best params:', best_params)
+
+    logging.info('Best score: %f' % best_score)
+    logging.info('Best eval result: %s' % best_eval_result)
+    logging.info('Best params: %s' % best_params)
     for i, result in enumerate(param_search.search_results):
-        print(i, result.eval_results['loss'], result.eval_results['accuracy'], result.params)
+        logging.info('%d\t%f\t%f\t%s' % (i, result.eval_results['loss'], result.eval_results['accuracy'], result.params))
 
     spark_session.stop()
